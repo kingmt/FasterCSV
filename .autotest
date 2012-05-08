@@ -1,0 +1,7 @@
+class Autotest
+
+  def test_files_for(filename)
+    return Dir["test/tc*.rb"]
+  end 
+
+end

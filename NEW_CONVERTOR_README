@@ -1,0 +1,58 @@
+New Convertor
+
+This fully backwards compatible extension to FasterCSV will allow users to specify which fields should use which convertors
+
+Suppose we had the csv file:
+first name,last name,address,city,state,zip,age
+John,Smith,55 Any Place,Somewhere,IL,60606-3405,29
+
+
+
+if we tell FasterCSV to convert integers like this:
+FasterCSV.new :convertors => :integer
+
+it will attempt to convert all the fields to an integer, rescuing exceptions for first name, last name, address, city, state, and zip. While this works, it is inefficient, since we know only the age field will be converted. A better idea would be to tell FasterCSV to only attempt to convert the age field
+
+FasterCSV.new :convertors => {'age' => :integer}
+
+But here is another consideration, suppose the csv was:
+first name,last name,address,city,state,zip,age
+John,Smith,55 Any Place,Somewhere,IL,60606-3405,29
+Joe,Smith,7 Some Place,Smallville,IL,06140,22
+
+where the zip field is intended to be a string. If we tell FasterCSV to convert integers like this:
+FasterCSV.new :convertors => :integer
+
+Then John Smith's zip will be a string, while Joe Smith's zip will be the integer 3168, which is not at all what we want.
+
+FasterCSV::Convertors[:age_integer] = {|field, field_struct| ... }
+FasterCSV.new :convertors => :age_integer
+
+A major concern with the new declaration style is the following are not equal:
+FasterCSV.new :convertors => {'age' => :integer}
+FasterCSV.new :convertors => {:age => :integer}
+
+but these are:
+FasterCSV.new :convertors => {'age' => :integer}
+FasterCSV.new :header_convertors => :symbol, :convertors => {:age => :integer}
+
+
+What about csv files without headers?
+
+John,Smith,55 Any Place,Somewhere,IL,60606-3405,29
+Joe,Smith,7 Some Place,Smallville,IL,06194,22
+
+Headers need to be explicitly defined:
+FasterCSV.new :convertors => {:age => :integer}, :headers => [:first_name,:last_name,:address,:city,:state,:zip,:age]
+
+
+Predefine convertors vs specifying inline?
+item name,quantity,price
+foo,2,$1.15
+
+FasterCSV::Convertors[:price_float] = {|field, field_struct| ... }
+FasterCSV.new :header_convertors => :symbol, :convertors => {:price => :price_float}
+
+vs
+
+FasterCSV.new :header_convertors => :symbol, :convertors => {:price => proc {|| }}

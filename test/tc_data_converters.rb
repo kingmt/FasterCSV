@@ -170,6 +170,14 @@ class TestDataConverters < Test::Unit::TestCase
     assert_equal(["Numbers", ":integer", 100, ":float", "3.015"], @parser.shift.fields)
   end
   
+  def test_new_converter_declaration
+    @parser = FasterCSV.new(@data, :headers => %w{one two three four five}, :converters => {'three' => :integer})
+    assert_equal(["Numbers", ":integer", 1, ":float", "3.015"], @parser.shift.fields)
+
+    @parser = FasterCSV.new(@data, :headers => %w{one two three four five}, :converters => {'three' => :numeric, 'five' => :numeric})
+    assert_equal(["Numbers", ":integer", 1, ":float", 3.015], @parser.shift.fields)
+  end
+ 
   def test_shortcut_interface
     assert_equal( ["Numbers", ":integer", 1, ":float", 3.015],
                   FasterCSV.parse_line(@data, :converters => :numeric) )

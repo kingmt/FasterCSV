@@ -1488,7 +1488,7 @@ class FasterCSV
   # converted field or the field itself.
   # 
   def convert(name = nil, &converter)
-    add_converter(:converters, self.class::Converters, name, &converter)
+    add_converter(@converters.default, self.class::Converters, name, &converter)
   end
 
   # 
@@ -1503,7 +1503,7 @@ class FasterCSV
   # effect.
   # 
   def header_convert(name = nil, &converter)
-    add_converter( :header_converters,
+    add_converter( @header_converters.default,
                    self.class::HeaderConverters,
                    name,
                    &converter )
@@ -1640,7 +1640,7 @@ class FasterCSV
         unconverted = csv.dup if @unconverted_fields
 
         # convert fields, if needed...
-        csv = convert_fields(csv) unless @use_headers or @converters.empty?
+        csv = convert_fields(csv) unless @use_headers or (@converters.empty? and @converters.default.empty?)
         # parse out header rows and handle FasterCSV::Row conversions...
         csv = parse_headers(csv)  if     @use_headers
 
@@ -1819,28 +1819,43 @@ class FasterCSV
       @unconverted_fields = options.delete(:unconverted_fields)
     end
 
-    instance_variable_set("@#{field_name}", Array.new)
-    
-    # find the correct method to add the coverters
-    convert = method(field_name.to_s.sub(/ers\Z/, ""))
-    
+    converters = Hash.new(Array.new)
+    predefined_converters = if field_name == :converters
+                              self.class::Converters
+                            else
+                              self.class::HeaderConverters
+                            end
+
     # load converters
     unless options[field_name].nil?
-      # allow a single converter not wrapped in an Array
-      unless options[field_name].is_a? Array
-        options[field_name] = [options[field_name]]
-      end
-      # load each converter...
-      options[field_name].each do |converter|
-        if converter.is_a? Proc  # custom code block
-          convert.call(&converter)
-        else                     # by name
-          convert.call(converter)
+      case options[field_name]
+      when Hash
+        options[field_name].each_pair do |header, converter|
+          if converters.is_a? Array
+            load_each_converter(converters[header], predefined_converters, converter)
+          else
+            load_each_converter(converters[header], predefined_converters, [converter])
+          end
         end
+      when Array
+        load_each_converter(converters.default, predefined_converters, options[field_name])
+      else
+        load_each_converter(converters.default, predefined_converters, [options[field_name]])
       end
     end
     
+    instance_variable_set("@#{field_name}", converters)
     options.delete(field_name)
+  end
+
+  def load_each_converter(destination, predefined_converters, array_of_converters)
+    array_of_converters.each do |converter|
+      if converter.is_a? Proc  # custom code block
+        add_converter(destination, predefined_converters, &converter)
+      else                     # by name
+        add_converter(destination, predefined_converters, converter)
+      end
+    end
   end
   
   # Stores header row settings and loads header converters, if needed.
@@ -1866,7 +1881,7 @@ class FasterCSV
   # 
   def add_converter(var_name, const, name = nil, &converter)
     if name.nil?  # custom converter
-      instance_variable_get("@#{var_name}") << converter
+      var_name << converter
     else          # named converter
       combo = const[name]
       case combo
@@ -1875,7 +1890,7 @@ class FasterCSV
           add_converter(var_name, const, converter_name)
         end
       else        # individual named converter
-        instance_variable_get("@#{var_name}") << combo
+        var_name << combo
       end
     end
   end
@@ -1892,11 +1907,11 @@ class FasterCSV
     converters = headers ? @header_converters : @converters
     
     fields.enum_for(:each_with_index).map do |field, index|  # map_with_index
-      converters.each do |converter|
+      header = @use_headers ? @headers[index] : nil
+      converters[header].each do |converter|
         field = if converter.arity == 1  # straight field converter
           converter[field]
         else                             # FieldInfo converter
-          header = @use_headers && !headers ? @headers[index] : nil
           converter[field, FieldInfo.new(index, lineno, header)]
         end
         break unless field.is_a? String  # short-curcuit pipeline for speed
